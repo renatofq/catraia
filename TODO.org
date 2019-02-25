@@ -1,0 +1,8 @@
+* TODO Document packages
+* TODO Write tests
+
+* TODO Add license header to files
+* TODO Check container status after deploy
+* TODO Create task listener to avod direct dependency with endpoint.Store
+* TODO Implement container listing (is it really necessary?)
+* TODO setup gomodule
