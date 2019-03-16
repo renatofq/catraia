@@ -7,12 +7,8 @@ import (
 	"os/signal"
 	"sync"
 	"syscall"
-	"time"
 
-	"github.com/renatofq/catraia/config"
-	"github.com/renatofq/catraia/container"
-	"github.com/renatofq/catraia/endpoint"
-	"github.com/renatofq/catraia/server"
+	"github.com/renatofq/catraia/servers"
 )
 
 func setupSignalHandling(ctx context.Context) context.Context {
@@ -32,40 +28,28 @@ func setupSignalHandling(ctx context.Context) context.Context {
 	return ctx
 }
 
-func runServer(s server.Server, alias string) {
-	err := s.ListenAndServe()
-
-	log.Printf("%s Server shutdown: %v\n", alias, err)
-}
-
-func shutdownServer(ctx context.Context, s server.Server, alias string) {
-
-	timeoutCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
-	defer cancel()
-
-	if err := s.Shutdown(timeoutCtx); err != nil {
-		log.Printf("Error during %s Server shutdown: %v\n", alias, err)
-	}
-}
-
 func main() {
-	log.Printf("Catraia is starting\n")
+	log.Printf("catraia is starting\n")
 
 	ctx := setupSignalHandling(context.Background())
 
-	store := endpoint.NewStore()
-	containerService := container.New(config.NewGetter(), store)
+	eventListener := NewContainerListener("unix", "/run/catraia/event.sock")
 
-	proxyServer := server.NewProxy(":2020", store)
-	go runServer(proxyServer, "Proxy")
+	containerService := NewContainerService(NewConfigService(), eventListener)
 
-	apiServer := server.NewAPI(":2077", containerService)
-	go runServer(apiServer, "API")
+	tunnelServer := NewTunnelServer("Tunnel", "tcp", ":2020", "unix",
+		"/run/catraia/proxy.sock")
+	go servers.Run(tunnelServer)
 
-	log.Printf("Catraia is ready\n")
+	apiServer := NewAPIServer("API", ":2077", containerService)
+	go servers.Run(apiServer)
 
-	// Wait until context is done
+	log.Printf("catraia is ready\n")
+
+	// Wait until context is done by receiving a signal to terminate
 	<-ctx.Done()
+
+	log.Printf("catraia is shutting down\n")
 
 	var wg sync.WaitGroup
 
@@ -73,15 +57,14 @@ func main() {
 
 	go func() {
 		defer wg.Done()
-		shutdownServer(context.Background(), proxyServer, "Proxy")
+		servers.Shutdown(context.Background(), tunnelServer)
 	}()
 
 	go func() {
 		defer wg.Done()
-		shutdownServer(context.Background(), apiServer, "API")
+		servers.Shutdown(context.Background(), apiServer)
 	}()
 
-	log.Printf("Waiting services to shutdown\n")
 	wg.Wait()
-	log.Printf("Catraia is down\n")
+	log.Printf("catraia is down\n")
 }

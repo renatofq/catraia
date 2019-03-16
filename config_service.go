@@ -1,19 +1,19 @@
-package config
+package main
 
 type Config struct {
 	ContainerID string
-	ImageRef string
+	ImageRef    string
 }
 
-type Getter interface {
+type ConfigService interface {
 	Get(id string) (*Config, error)
 }
 
 type configMap map[string]*Config
 
-func NewGetter() Getter {
+func NewConfigService() ConfigService {
 	return configMap{
-		"helloweb": &Config{"helloweb", "docker.io/renatofq/helloweb:latest"},
+		"helloweb":   &Config{"helloweb", "docker.io/renatofq/helloweb:latest"},
 	}
 }
 

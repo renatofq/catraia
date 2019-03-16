@@ -1,27 +1,21 @@
-package server
+package handlers
 
 import (
-	"context"
 	"log"
 	"net/http"
 )
 
-type Server interface {
-	ListenAndServe() error
-	Shutdown(context.Context) error
+type Adapter func(http.Handler) http.Handler
+
+type Chain struct {
+	adapters []Adapter
 }
 
-type adapter func(http.Handler) http.Handler
-
-type chain struct {
-	adapters []adapter
+func NewChain(adapters ...Adapter) Chain {
+	return Chain{append(([]Adapter)(nil), adapters...)}
 }
 
-func newChain(adapters ...adapter) chain {
-	return chain{append(([]adapter)(nil), adapters...)}
-}
-
-func (c chain) then(h http.Handler) http.Handler {
+func (c Chain) Then(h http.Handler) http.Handler {
 	for i := len(c.adapters) - 1; i >= 0; i-- {
 		h = c.adapters[i](h)
 	}
@@ -29,7 +23,7 @@ func (c chain) then(h http.Handler) http.Handler {
 	return h
 }
 
-func logAdapter() adapter {
+func LogAdapter() Adapter {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			log.Printf("Request %s %s %s\n", r.Method, r.URL.String(), r.Proto)
@@ -38,7 +32,7 @@ func logAdapter() adapter {
 	}
 }
 
-func corsAdapter() adapter {
+func CORSAdapter() Adapter {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Access-Control-Allow-Origin", "*")

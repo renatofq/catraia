@@ -1,17 +1,12 @@
-package container
+package main
 
 import (
 	"context"
 	"fmt"
 	"log"
-	"net"
-	"net/url"
 	"strings"
 	"syscall"
 	"time"
-
-	"github.com/renatofq/catraia/config"
-	"github.com/renatofq/catraia/endpoint"
 
 	"github.com/containerd/containerd"
 	"github.com/containerd/containerd/cio"
@@ -25,19 +20,23 @@ type Info struct {
 	Data      interface{}
 }
 
-type Service interface {
+type ContainerService interface {
 	Deploy(ctx context.Context, id string) error
 	Undeploy(ctx context.Context, id string) error
 	Info(ctx context.Context, id string) (*Info, error)
 }
 
-type service struct {
-	getter config.Getter
-	store  endpoint.Store
+type CreationListener interface {
+	Created(id string, pid uint32)
 }
 
-func New(getter config.Getter, store endpoint.Store) Service {
-	return &service{getter, store}
+type service struct {
+	getter    ConfigService
+	listeners []CreationListener
+}
+
+func NewContainerService(getter ConfigService, listeners ...CreationListener) ContainerService {
+	return &service{getter, listeners}
 }
 
 func (c *service) Deploy(ctx context.Context, id string) error {
@@ -58,7 +57,8 @@ func (c *service) Deploy(ctx context.Context, id string) error {
 
 	log.Printf("Deployng %s...\n", config.ContainerID)
 	defer log.Printf("Deploy done")
-	if _, err := ensureTask(ctx, client, config, c.store); err != nil {
+
+	if _, err := c.ensureTask(ctx, client, config); err != nil {
 		return err
 	}
 
@@ -80,11 +80,11 @@ func (c *service) Undeploy(ctx context.Context, id string) error {
 		return fmt.Errorf("container %s not found: %v", id, err)
 	}
 
-	if err := c.store.Delete(id); err != nil {
-		log.Printf("Fail to remove task endpoint from store: %v\n", err)
+	if err := ensureTaskDelete(ctx, container); err != nil {
+		return err
 	}
 
-	return ensureTaskDelete(ctx, container)
+	return nil
 }
 
 func (c *service) Info(ctx context.Context, id string) (*Info, error) {
@@ -118,8 +118,8 @@ func (c *service) Info(ctx context.Context, id string) (*Info, error) {
 	}, nil
 }
 
-func ensureTask(ctx context.Context, client *containerd.Client,
-	config *config.Config, store endpoint.Store) (task containerd.Task, err error) {
+func (c *service) ensureTask(ctx context.Context, client *containerd.Client,
+	config *Config) (task containerd.Task, err error) {
 
 	container, err := ensureContainer(ctx, client, config)
 	if err != nil {
@@ -128,14 +128,13 @@ func ensureTask(ctx context.Context, client *containerd.Client,
 
 	task, err = container.Task(ctx, nil)
 	if err != nil {
-		return createTask(ctx, container, store)
+		return c.createTask(ctx, container)
 	}
 
 	return task, nil
 }
 
-func createTask(ctx context.Context, container containerd.Container,
-	store endpoint.Store) (_ containerd.Task, errRet error) {
+func (c *service) createTask(ctx context.Context, container containerd.Container) (_ containerd.Task, errRet error) {
 
 	log.Printf("Creating task for container %s\n", container.ID())
 	task, err := container.NewTask(ctx, cio.NewCreator(cio.WithStdio))
@@ -148,23 +147,9 @@ func createTask(ctx context.Context, container containerd.Container,
 		}
 	}()
 
-	addrs, err := setupNetworkIf(task.Pid())
-	if err != nil {
-		log.Printf("Fail to setup network interfaces on new task: %v\n", err)
-		return nil, err
+	for _, l := range c.listeners {
+		l.Created(container.ID(), task.Pid())
 	}
-
-	if len(addrs) == 0 {
-		return nil, fmt.Errorf("no ip addres was setup on the new task")
-	}
-
-	ep, err := toEndpoint(addrs[0])
-	if err != nil {
-		log.Printf("Fail to generate endpoint to task: %v\n", err)
-		return nil, err
-	}
-
-	store.Store(container.ID(), *ep)
 
 	log.Printf("Starting task for container %s\n", container.ID())
 	if err := task.Start(ctx); err != nil {
@@ -228,7 +213,7 @@ func stopWaitTask(ctx context.Context, task containerd.Task) (*containerd.ExitSt
 }
 
 func ensureContainer(ctx context.Context, client *containerd.Client,
-	config *config.Config) (containerd.Container, error) {
+	config *Config) (containerd.Container, error) {
 
 	container, err := client.LoadContainer(ctx, config.ContainerID)
 	if err != nil {
@@ -252,7 +237,7 @@ func ensureContainer(ctx context.Context, client *containerd.Client,
 }
 
 func createContainer(ctx context.Context, client *containerd.Client,
-	config *config.Config) (containerd.Container, error) {
+	config *Config) (containerd.Container, error) {
 
 	image, err := ensureImage(ctx, client, config)
 	if err != nil {
@@ -277,7 +262,7 @@ func deleteContainer(ctx context.Context, container containerd.Container) error 
 }
 
 func ensureImage(ctx context.Context, client *containerd.Client,
-	config *config.Config) (containerd.Image, error) {
+	config *Config) (containerd.Image, error) {
 
 	image, err := client.GetImage(ctx, config.ImageRef)
 	if err != nil {
@@ -290,16 +275,4 @@ func ensureImage(ctx context.Context, client *containerd.Client,
 func pullImage(ctx context.Context, client *containerd.Client, ref string) (containerd.Image, error) {
 	log.Printf("Pulling image %s\n", ref)
 	return client.Pull(ctx, ref, containerd.WithPullUnpack)
-}
-
-func toEndpoint(addr net.IP) (*url.URL, error) {
-	epStr := fmt.Sprintf("http://%s:8080/", addr.String())
-
-	log.Printf("addr: %v - %s\n", addr, addr.String())
-	ep, err := url.Parse(epStr)
-	if err != nil {
-		return nil, err
-	}
-
-	return ep, nil
 }
