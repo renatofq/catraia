@@ -10,12 +10,6 @@ import (
 	"github.com/renatofq/catraia/utils"
 )
 
-func init() {
-	if err := utils.LoadDotEnv(); err != nil {
-		log.Printf("No .env file found\n")
-	}
-}
-
 func setupContainerService(conf *config.Config) ContainerService {
 	ctrdConf := &ContainerdConfig{
 		Namespace: conf.ContainerdNamespace,

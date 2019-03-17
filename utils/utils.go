@@ -7,8 +7,6 @@ import (
 	"os/signal"
 	"strings"
 	"syscall"
-
-	"github.com/joho/godotenv"
 )
 
 func NetTypeFromAddr(addr string) string {
@@ -34,8 +32,4 @@ func SignalHandling(ctx context.Context) context.Context {
 	}()
 
 	return ctx
-}
-
-func LoadDotEnv() error {
-	return godotenv.Load()
 }

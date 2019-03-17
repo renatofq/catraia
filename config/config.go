@@ -16,7 +16,7 @@ type Config struct {
 func New() *Config {
 	return &Config{
 		RuntimeDir:          getEnv("CATRAIA_RUNTIME_DIR", "/run/catraia"),
-		APIServerAddr:       getEnv("CATRAIA_API_SERVER_ADDR", "/run/catraia/event.sock"),
+		APIServerAddr:       getEnv("CATRAIA_API_SERVER_ADDR", ":2077"),
 		NetServerAddr:       getEnv("CATRAIA_NET_SERVER_ADDR", "/run/catraia/event.sock"),
 		TunnelAddr:          getEnv("CATRAIA_TUNNEL_ADDR", ":2020"),
 		ProxyAddr:           getEnv("CATRAIA_PROXY_ADDR", "/run/catraia/proxy.sock"),
