@@ -3,46 +3,58 @@ package main
 import (
 	"context"
 	"log"
-	"os"
-	"os/signal"
 	"sync"
-	"syscall"
 
+	"github.com/renatofq/catraia/config"
 	"github.com/renatofq/catraia/servers"
+	"github.com/renatofq/catraia/utils"
 )
 
-func setupSignalHandling(ctx context.Context) context.Context {
-	ctx, cancel := context.WithCancel(context.Background())
+func init() {
+	if err := utils.LoadDotEnv(); err != nil {
+		log.Printf("No .env file found\n")
+	}
+}
 
-	// we may loose signals with a buffer of 1. But, as we quit after receiving
-	// any of the handled signals it makes no difference
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, os.Signal(syscall.SIGINT),
-		os.Signal(syscall.SIGTERM))
-	go func() {
-		defer cancel()
-		sig := <-sigChan
-		log.Printf("canceled by signal: %v\n", sig)
-	}()
+func setupContainerService(conf *config.Config) ContainerService {
+	ctrdConf := &ContainerdConfig{
+		Namespace: conf.ContainerdNamespace,
+		Socket:    conf.ContainerdSocket,
+	}
 
-	return ctx
+	configService := NewConfigService()
+
+	eventListener := NewContainerListener(conf.NetServerAddr)
+
+	return NewContainerService(ctrdConf, configService, eventListener)
+}
+
+func setupTunnelServer(conf *config.Config) servers.Server {
+	tunnelServer := NewTunnelServer("Tunnel", conf.TunnelAddr, conf.ProxyAddr)
+	go servers.Run(tunnelServer)
+
+	return tunnelServer
+}
+
+func setupAPIServer(conf *config.Config) servers.Server {
+	containerService := setupContainerService(conf)
+
+	apiServer := NewAPIServer("API", conf.APIServerAddr, containerService)
+	go servers.Run(apiServer)
+
+	return apiServer
 }
 
 func main() {
 	log.Printf("catraia is starting\n")
 
-	ctx := setupSignalHandling(context.Background())
+	ctx := utils.SignalHandling(context.Background())
 
-	eventListener := NewContainerListener("unix", "/run/catraia/event.sock")
+	conf := config.New()
 
-	containerService := NewContainerService(NewConfigService(), eventListener)
+	tunnelServer := setupTunnelServer(conf)
 
-	tunnelServer := NewTunnelServer("Tunnel", "tcp", ":2020", "unix",
-		"/run/catraia/proxy.sock")
-	go servers.Run(tunnelServer)
-
-	apiServer := NewAPIServer("API", ":2077", containerService)
-	go servers.Run(apiServer)
+	apiServer := setupAPIServer(conf)
 
 	log.Printf("catraia is ready\n")
 

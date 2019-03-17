@@ -8,25 +8,22 @@ import (
 	"sync"
 
 	"github.com/renatofq/catraia/servers"
+	"github.com/renatofq/catraia/utils"
 )
 
 type tunServer struct {
 	name string
-	listenNet  string
 	listenAddr string
-	destNet    string
 	destAddr   string
 
 	listener net.Listener
 	waiting  sync.WaitGroup
 }
 
-func NewTunnelServer(name, listenNet, listenAddr, destNet, destAddr string) servers.Server {
+func NewTunnelServer(name, listenAddr, destAddr string) servers.Server {
 	return &tunServer{
 		name: name,
-		listenNet: listenNet,
 		listenAddr: listenAddr,
-		destNet: destNet,
 		destAddr: destAddr,
 	}
 }
@@ -36,7 +33,7 @@ func (ts *tunServer) Name() string {
 }
 
 func (ts *tunServer) ListenAndServe() error {
-	l, err := net.Listen(ts.listenNet, ts.listenAddr)
+	l, err := net.Listen(utils.NetTypeFromAddr(ts.listenAddr), ts.listenAddr)
 	if err != nil {
 		return err
 	}
@@ -59,7 +56,7 @@ func (ts *tunServer) Serve(l net.Listener) error {
 		ts.waiting.Add(1)
 		go func(wg *sync.WaitGroup) {
 			defer wg.Done()
-			handleConnection(conn, ts.destNet, ts.destAddr)
+			handleConnection(conn, utils.NetTypeFromAddr(ts.destAddr), ts.destAddr)
 		}(&ts.waiting)
 	}
 }

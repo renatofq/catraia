@@ -30,50 +30,57 @@ type CreationListener interface {
 	Created(id string, pid uint32)
 }
 
-type service struct {
-	getter    ConfigService
-	listeners []CreationListener
+type ContainerdConfig struct {
+	Namespace string
+	Socket    string
 }
 
-func NewContainerService(getter ConfigService, listeners ...CreationListener) ContainerService {
-	return &service{getter, listeners}
+type service struct {
+	conf          *ContainerdConfig
+	configService ContainerConfigService
+	listeners     []CreationListener
+}
+
+func NewContainerService(conf *ContainerdConfig, configService ContainerConfigService, listeners ...CreationListener) ContainerService {
+	return &service{conf, configService, listeners}
 }
 
 func (c *service) Deploy(ctx context.Context, id string) error {
 	log.Printf("Conneting to containerd\n")
-	client, err := containerd.New("/run/containerd/containerd.sock")
+	client, err := containerd.New(c.conf.Socket)
 	if err != nil {
 		return err
 	}
 	defer client.Close()
 
 	log.Printf("Getting container configuration\n")
-	config, err := c.getter.Get(id)
+	config, err := c.configService.Get(id)
 	if err != nil {
 		return err
 	}
 
-	ctx = namespaces.WithNamespace(ctx, "default")
+	ctx = namespaces.WithNamespace(ctx, c.conf.Namespace)
 
 	log.Printf("Deployng %s...\n", config.ContainerID)
-	defer log.Printf("Deploy done")
 
 	if _, err := c.ensureTask(ctx, client, config); err != nil {
 		return err
 	}
+
+	log.Printf("Deploy done")
 
 	return nil
 }
 
 func (c *service) Undeploy(ctx context.Context, id string) error {
 	log.Printf("Conneting to containerd\n")
-	client, err := containerd.New("/run/containerd/containerd.sock")
+	client, err := containerd.New(c.conf.Socket)
 	if err != nil {
 		return err
 	}
 	defer client.Close()
 
-	ctx = namespaces.WithNamespace(ctx, "default")
+	ctx = namespaces.WithNamespace(ctx, c.conf.Namespace)
 
 	container, err := client.LoadContainer(ctx, id)
 	if err != nil {
@@ -89,13 +96,13 @@ func (c *service) Undeploy(ctx context.Context, id string) error {
 
 func (c *service) Info(ctx context.Context, id string) (*Info, error) {
 	log.Printf("Conneting to containerd\n")
-	client, err := containerd.New("/run/containerd/containerd.sock")
+	client, err := containerd.New(c.conf.Socket)
 	if err != nil {
 		return nil, err
 	}
 	defer client.Close()
 
-	ctx = namespaces.WithNamespace(ctx, "default")
+	ctx = namespaces.WithNamespace(ctx, c.conf.Namespace)
 	container, err := client.LoadContainer(ctx, id)
 	if err != nil {
 		return nil, fmt.Errorf("container %s not found: %v", id, err)
@@ -119,7 +126,7 @@ func (c *service) Info(ctx context.Context, id string) (*Info, error) {
 }
 
 func (c *service) ensureTask(ctx context.Context, client *containerd.Client,
-	config *Config) (task containerd.Task, err error) {
+	config *ContainerConfig) (task containerd.Task, err error) {
 
 	container, err := ensureContainer(ctx, client, config)
 	if err != nil {
@@ -213,7 +220,7 @@ func stopWaitTask(ctx context.Context, task containerd.Task) (*containerd.ExitSt
 }
 
 func ensureContainer(ctx context.Context, client *containerd.Client,
-	config *Config) (containerd.Container, error) {
+	config *ContainerConfig) (containerd.Container, error) {
 
 	container, err := client.LoadContainer(ctx, config.ContainerID)
 	if err != nil {
@@ -237,7 +244,7 @@ func ensureContainer(ctx context.Context, client *containerd.Client,
 }
 
 func createContainer(ctx context.Context, client *containerd.Client,
-	config *Config) (containerd.Container, error) {
+	config *ContainerConfig) (containerd.Container, error) {
 
 	image, err := ensureImage(ctx, client, config)
 	if err != nil {
@@ -262,7 +269,7 @@ func deleteContainer(ctx context.Context, container containerd.Container) error 
 }
 
 func ensureImage(ctx context.Context, client *containerd.Client,
-	config *Config) (containerd.Image, error) {
+	config *ContainerConfig) (containerd.Image, error) {
 
 	image, err := client.GetImage(ctx, config.ImageRef)
 	if err != nil {

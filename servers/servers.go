@@ -6,6 +6,8 @@ import (
 	"net"
 	"net/http"
 	"time"
+
+	"github.com/renatofq/catraia/utils"
 )
 
 type Server interface {
@@ -32,12 +34,11 @@ func Shutdown(ctx context.Context, s Server) {
 
 type httpServer struct {
 	name       string
-	listenNet  string
-	listenAddr string
+	address    string
 	httpServer *http.Server
 }
 
-func NewHTTPServer(name, listenNet, listenAddr string, handler http.Handler) Server {
+func NewHTTPServer(name, address string, handler http.Handler) Server {
 
 	server := &http.Server{
 		Handler: handler,
@@ -45,8 +46,7 @@ func NewHTTPServer(name, listenNet, listenAddr string, handler http.Handler) Ser
 
 	return &httpServer{
 		name:       name,
-		listenNet:  listenNet,
-		listenAddr: listenAddr,
+		address:    address,
 		httpServer: server,
 	}
 }
@@ -56,7 +56,7 @@ func (hs *httpServer) Name() string {
 }
 
 func (hs *httpServer) ListenAndServe() error {
-	l, err := net.Listen(hs.listenNet, hs.listenAddr)
+	l, err := net.Listen(utils.NetTypeFromAddr(hs.address), hs.address)
 	if err != nil {
 		return err
 	}
@@ -67,4 +67,3 @@ func (hs *httpServer) ListenAndServe() error {
 func (hs *httpServer) Shutdown(ctx context.Context) error {
 	return hs.httpServer.Shutdown(ctx)
 }
-

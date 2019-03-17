@@ -11,18 +11,19 @@ import (
 
 	"github.com/renatofq/catraia/events"
 	"github.com/renatofq/catraia/handlers"
+	"github.com/renatofq/catraia/utils"
 )
 
 type containerListener struct {
 	client http.Client
 }
 
-func NewContainerListener(network, address string) CreationListener {
+func NewContainerListener(address string) CreationListener {
 	return &containerListener{
 		client: http.Client{
 			Transport: &http.Transport{
 				DialContext: func(_ context.Context, _, _ string) (net.Conn, error) {
-					return net.Dial(network, address)
+					return net.Dial(utils.NetTypeFromAddr(address), address)
 				},
 			},
 		},

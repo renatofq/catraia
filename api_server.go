@@ -11,15 +11,15 @@ import (
 	"github.com/renatofq/catraia/servers"
 )
 
-func NewAPIServer(name, addr string, containerService ContainerService) servers.Server {
+func NewAPIServer(name, addr string, ctrService ContainerService) servers.Server {
 
 	mux := http.NewServeMux()
 
 	chain := handlers.NewChain(handlers.LogAdapter(), handlers.CORSAdapter())
 
-	mux.Handle("/service/", chain.Then(newServiceHandler(containerService)))
+	mux.Handle("/service/", chain.Then(newServiceHandler(ctrService)))
 
-	return servers.NewHTTPServer(name, "tcp", addr, mux)
+	return servers.NewHTTPServer(name, addr, mux)
 }
 
 type serviceHandler struct {
