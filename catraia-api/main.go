@@ -16,7 +16,10 @@ func setupContainerService(conf *config.Config) ContainerService {
 		Socket:    conf.ContainerdSocket,
 	}
 
-	infoService := NewInfoService()
+	infoService, err := NewInfoService(conf.ImageInfoFile)
+	if err != nil {
+		return nil
+	}
 
 	eventListener := NewContainerListener(conf.NetServerAddr)
 

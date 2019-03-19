@@ -12,11 +12,11 @@ import (
 	"github.com/vishvananda/netlink"
 )
 
-func setupNetworkIf(netns string) ([]net.IP, error) {
+func setupNetworkIf(netns, cniConfDir, cniPluginDir string) ([]net.IP, error) {
 	id := uuid.New().String()
 
-	cni, err := gocni.New(gocni.WithPluginConfDir("./etc/net.d/"),
-		gocni.WithPluginDir([]string{"/usr/lib/cni"}))
+	cni, err := gocni.New(gocni.WithPluginConfDir(cniConfDir),
+		gocni.WithPluginDir([]string{cniPluginDir}))
 	if err != nil {
 		return nil, err
 	}

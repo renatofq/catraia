@@ -1,0 +1,5 @@
+{
+    "helloweb" : {
+        "ref" : "docker.io/renatofq/helloweb:latest"
+    }
+}

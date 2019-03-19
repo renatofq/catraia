@@ -23,7 +23,8 @@ func setupProxyServer(conf *config.Config, store EndpointStore) servers.Server {
 }
 
 func setupNetworkServer(conf *config.Config, store EndpointStore) servers.Server {
-	eventServer := NewEventServer("EventListener", conf.NetServerAddr, store)
+	eventServer := NewEventServer("EventListener", conf.NetServerAddr,
+		conf.CNIConfDir, conf.CNIPluginDir, store)
 	go servers.Run(eventServer)
 
 	return eventServer

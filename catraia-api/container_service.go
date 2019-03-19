@@ -237,7 +237,7 @@ func ensureContainer(ctx context.Context, client *containerd.Client,
 		return nil, err
 	}
 
-	if image.Name() != imageInfo.ImageRef {
+	if image.Name() != imageInfo.Ref {
 		if err := deleteContainer(ctx, container); err != nil {
 			return nil, err
 		}
@@ -276,9 +276,9 @@ func deleteContainer(ctx context.Context, container containerd.Container) error 
 func ensureImage(ctx context.Context, client *containerd.Client,
 	config *ImageInfo) (containerd.Image, error) {
 
-	image, err := client.GetImage(ctx, config.ImageRef)
+	image, err := client.GetImage(ctx, config.Ref)
 	if err != nil {
-		return pullImage(ctx, client, config.ImageRef)
+		return pullImage(ctx, client, config.Ref)
 	}
 
 	return image, nil

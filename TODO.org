@@ -1,3 +1,4 @@
+* TODO Check for conatiner modifications on deploy
 * TODO Bug Tunnel Server does not shutdown gracefully
 * TODO Bug ensureTask does not return error when task fail to start
 * TODO Document packages

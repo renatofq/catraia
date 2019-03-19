@@ -15,23 +15,27 @@ import (
 	"github.com/renatofq/catraia/servers"
 )
 
-func NewEventServer(name, addr string, store EndpointStore) servers.Server {
+func NewEventServer(name, addr, cniConfDir, cniPluginDir string, store EndpointStore) servers.Server {
 
 	mux := http.NewServeMux()
 
 	chain := handlers.NewChain(handlers.LogAdapter())
 
-	mux.Handle("/container", chain.Then(newEventHandler(store)))
+	evtHandler := newEventHandler(cniConfDir, cniPluginDir, store)
+
+	mux.Handle("/container", chain.Then(evtHandler))
 
 	return servers.NewHTTPServer(name, addr, mux)
 }
 
 type eventHandler struct {
-	store EndpointStore
+	cniConfDir   string
+	cniPluginDir string
+	store        EndpointStore
 }
 
-func newEventHandler(store EndpointStore) http.Handler {
-	return &eventHandler{store}
+func newEventHandler(cniConfDir, cniPluginDir string, store EndpointStore) http.Handler {
+	return &eventHandler{cniConfDir, cniPluginDir, store}
 }
 
 func (s *eventHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -65,7 +69,7 @@ func (s *eventHandler) postService(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	addrs, err := setupNetworkIf(evt.Namespace)
+	addrs, err := setupNetworkIf(evt.Namespace, s.cniConfDir, s.cniPluginDir)
 	if err != nil {
 		log.Printf("Failt to setup network: %v\n", err)
 		handlers.WriteError(w, http.StatusInternalServerError,
