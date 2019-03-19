@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"strings"
@@ -37,12 +38,12 @@ type ContainerdConfig struct {
 
 type service struct {
 	conf          *ContainerdConfig
-	configService ContainerConfigService
+	configService ImageInfoService
 	listeners     []CreationListener
 }
 
-func NewContainerService(conf *ContainerdConfig, configService ContainerConfigService, listeners ...CreationListener) ContainerService {
-	return &service{conf, configService, listeners}
+func NewContainerService(conf *ContainerdConfig, imageService ImageInfoService, listeners ...CreationListener) ContainerService {
+	return &service{conf, imageService, listeners}
 }
 
 func (c *service) Deploy(ctx context.Context, id string) error {
@@ -53,17 +54,21 @@ func (c *service) Deploy(ctx context.Context, id string) error {
 	}
 	defer client.Close()
 
-	log.Printf("Getting container configuration\n")
-	config, err := c.configService.Get(id)
+	log.Printf("Getting image configuration\n")
+	imageInfo, err := c.configService.Get(id)
 	if err != nil {
 		return err
 	}
 
+	if imageInfo == nil {
+		return errors.New("image does not exist at image service")
+	}
+
 	ctx = namespaces.WithNamespace(ctx, c.conf.Namespace)
 
-	log.Printf("Deployng %s...\n", config.ContainerID)
+	log.Printf("Deployng %s...\n", imageInfo.ID)
 
-	if _, err := c.ensureTask(ctx, client, config); err != nil {
+	if _, err := c.ensureTask(ctx, client, imageInfo); err != nil {
 		return err
 	}
 
@@ -126,9 +131,9 @@ func (c *service) Info(ctx context.Context, id string) (*Info, error) {
 }
 
 func (c *service) ensureTask(ctx context.Context, client *containerd.Client,
-	config *ContainerConfig) (task containerd.Task, err error) {
+	imageInfo *ImageInfo) (task containerd.Task, err error) {
 
-	container, err := ensureContainer(ctx, client, config)
+	container, err := ensureContainer(ctx, client, imageInfo)
 	if err != nil {
 		return nil, err
 	}
@@ -220,11 +225,11 @@ func stopWaitTask(ctx context.Context, task containerd.Task) (*containerd.ExitSt
 }
 
 func ensureContainer(ctx context.Context, client *containerd.Client,
-	config *ContainerConfig) (containerd.Container, error) {
+	imageInfo *ImageInfo) (containerd.Container, error) {
 
-	container, err := client.LoadContainer(ctx, config.ContainerID)
+	container, err := client.LoadContainer(ctx, imageInfo.ID)
 	if err != nil {
-		return createContainer(ctx, client, config)
+		return createContainer(ctx, client, imageInfo)
 	}
 
 	image, err := container.Image(ctx)
@@ -232,29 +237,29 @@ func ensureContainer(ctx context.Context, client *containerd.Client,
 		return nil, err
 	}
 
-	if image.Name() != config.ImageRef {
+	if image.Name() != imageInfo.ImageRef {
 		if err := deleteContainer(ctx, container); err != nil {
 			return nil, err
 		}
 
-		return createContainer(ctx, client, config)
+		return createContainer(ctx, client, imageInfo)
 	}
 
 	return container, nil
 }
 
 func createContainer(ctx context.Context, client *containerd.Client,
-	config *ContainerConfig) (containerd.Container, error) {
+	imageInfo *ImageInfo) (containerd.Container, error) {
 
-	image, err := ensureImage(ctx, client, config)
+	image, err := ensureImage(ctx, client, imageInfo)
 	if err != nil {
 		return nil, err
 	}
 
-	log.Printf("Creating container %s\n", config.ContainerID)
-	return client.NewContainer(ctx, config.ContainerID,
+	log.Printf("Creating container %s\n", imageInfo.ID)
+	return client.NewContainer(ctx, imageInfo.ID,
 		containerd.WithImage(image),
-		containerd.WithNewSnapshot(config.ContainerID+"-snapshot", image),
+		containerd.WithNewSnapshot(imageInfo.ID+"-snapshot", image),
 		containerd.WithNewSpec(oci.WithImageConfig(image),
 			oci.WithCapabilities([]string{"CAP_NET_RAW"})))
 }
@@ -269,7 +274,7 @@ func deleteContainer(ctx context.Context, container containerd.Container) error 
 }
 
 func ensureImage(ctx context.Context, client *containerd.Client,
-	config *ContainerConfig) (containerd.Image, error) {
+	config *ImageInfo) (containerd.Image, error) {
 
 	image, err := client.GetImage(ctx, config.ImageRef)
 	if err != nil {

@@ -16,11 +16,11 @@ func setupContainerService(conf *config.Config) ContainerService {
 		Socket:    conf.ContainerdSocket,
 	}
 
-	configService := NewConfigService()
+	infoService := NewInfoService()
 
 	eventListener := NewContainerListener(conf.NetServerAddr)
 
-	return NewContainerService(ctrdConf, configService, eventListener)
+	return NewContainerService(ctrdConf, infoService, eventListener)
 }
 
 func setupTunnelServer(conf *config.Config) servers.Server {

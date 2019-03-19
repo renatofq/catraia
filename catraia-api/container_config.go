@@ -1,22 +1,22 @@
 package main
 
-type ContainerConfig struct {
-	ContainerID string
+type ImageInfo struct {
+	ID string
 	ImageRef    string
 }
 
-type ContainerConfigService interface {
-	Get(id string) (*ContainerConfig, error)
+type ImageInfoService interface {
+	Get(id string) (*ImageInfo, error)
 }
 
-type configMap map[string]*ContainerConfig
+type infoMap map[string]*ImageInfo
 
-func NewConfigService() ContainerConfigService {
-	return configMap{
-		"helloweb":   &ContainerConfig{"helloweb", "docker.io/renatofq/helloweb:latest"},
+func NewInfoService() ImageInfoService {
+	return infoMap{
+		"helloweb":   &ImageInfo{"helloweb", "docker.io/renatofq/helloweb:latest"},
 	}
 }
 
-func (cMap configMap) Get(id string) (*ContainerConfig, error) {
+func (cMap infoMap) Get(id string) (*ImageInfo, error) {
 	return cMap[id], nil
 }
